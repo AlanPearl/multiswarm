@@ -6,6 +6,26 @@ INERTIAL_WEIGHT = 0.5 * np.log(2)
 ACC_CONST = 0.5 + np.log(2)
 
 
+def update_particle(
+    ran_key,
+    x,
+    v,
+    xmin,
+    xmax,
+    b_loc,
+    b_swarm,
+    w=INERTIAL_WEIGHT,
+    acc_loc=ACC_CONST,
+    acc_swarm=ACC_CONST,
+):
+    vnew = mc_update_velocity(
+        ran_key, x, v, xmin, xmax, b_loc, b_swarm, w, acc_loc, acc_swarm
+    )
+    xnew = x + vnew
+    xnew, vnew = _impose_reflecting_boundary_condition(x, v, xmin, xmax)
+    return xnew, vnew
+
+
 def mc_update_velocity(
     ran_key,
     x,
@@ -87,3 +107,24 @@ def _get_clipped_velocity(v, vmax):
     v = np.where(v > vmax, vmax, v)
     v = np.where(v < -vmax, -vmax, v)
     return v
+
+
+def _get_v_init(ran_key, xmin, xmax):
+    n_dim = xmin.size
+    vmax = _get_vmax(xmin, xmax)
+    u_init = jran.uniform(ran_key, shape=(n_dim,))
+    return u_init * vmax
+
+
+def _impose_reflecting_boundary_condition(x, v, xmin, xmax):
+    msk_lo = x < xmin
+    msk_hi = x > xmax
+    x = np.where(msk_lo, xmin, x)
+    x = np.where(msk_hi, xmax, x)
+    v = np.where(msk_lo | msk_hi, -v, v)
+    return x, v
+
+
+def _euclid_dsq(x, y):
+    d = y - x
+    return np.sum(d * d)
