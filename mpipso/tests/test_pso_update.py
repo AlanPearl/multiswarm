@@ -48,7 +48,6 @@ def test_get_v_init():
         assert np.all(np.abs(v_init) < vmax)
 
 
-@pytest.mark.skip
 def test_update_single_particle():
     n_dim = 2
     xmin = np.zeros(n_dim)
@@ -56,17 +55,18 @@ def test_update_single_particle():
 
     ran_key = jran.PRNGKey(TESTING_SEED)
     x_init_key, v_init_key, x_best_key, ran_key = jran.split(ran_key, 4)
-    x = jran.uniform(x_init_key, shape=(n_dim,), minval=xmin, maxval=xmax)
-    x_init = np.copy(x)
+    x_init = jran.uniform(x_init_key, shape=(n_dim,), minval=xmin, maxval=xmax)
+    x = np.copy(x_init)
 
     x_target = jran.uniform(x_best_key, shape=(n_dim,), minval=xmin, maxval=xmax)
 
     dsq_best = pso_update._euclid_dsq(x, x_target)
     dsq_init = np.copy(dsq_best)
 
-    v = pso_update._get_v_init(v_init_key, xmin, xmax)
+    v_init = pso_update._get_v_init(v_init_key, xmin, xmax)
     b_loc = np.copy(x)
     b_swarm = np.copy(x)
+    v = np.copy(v_init)
 
     n_updates = 500
     for istep in range(n_updates):
@@ -76,7 +76,14 @@ def test_update_single_particle():
             b_loc = x
             b_swarm = x
             dsq_best = dsq
-        assert np.all(x >= xmin)
-        assert np.all(x <= xmax)
-    msg = "x_init = {0}\nx_target = {1}\nx_final={2}\nd_init={3}\nd_best={4}"
-    assert False, msg.format(x_init, x_target, x, dsq_init, dsq_best)
+        assert np.all(x >= xmin), "x = {0} is below xmin"
+        assert np.all(x <= xmax), "x = {0} is above xmax"
+
+    if dsq_best == dsq_init:
+        msg_prefix = "Best value did not improve initial value\n"
+    elif dsq_best > dsq_init:
+        msg_prefix = "Best value got worse than initial value\n"
+    msg = msg_prefix + "x_init = {0}\nx_target = {1}\n"
+    msg = msg + "x_final = {2}\nd_init = {3}\nd_best = {4}"
+    args = x_init, x_target, x, dsq_init, dsq_best
+    assert dsq_best < dsq_init, msg.format(*args)
