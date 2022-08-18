@@ -58,8 +58,8 @@ def get_random_initial_conditions(ran_key, n_dim, xlo=0, xhi=1):
     return xmin, xmax, x_init, v_init, x_target
 
 
-def test_update_single_particle(seed=TESTING_SEED):
-    n_dim = 2
+def test_update_single_particle(seed=TESTING_SEED, n_updates=500):
+    n_dim = 10
     ran_key = jran.PRNGKey(seed)
     ran_key, init_key = jran.split(ran_key, 2)
     init_cond = get_random_initial_conditions(init_key, n_dim)
@@ -73,7 +73,6 @@ def test_update_single_particle(seed=TESTING_SEED):
     b_swarm = np.copy(x_init)
 
     collector = []
-    n_updates = 500
     for istep in range(n_updates):
         ran_key, update_key = jran.split(ran_key, 2)
         x, v = pso_update.update_particle(update_key, x, v, xmin, xmax, b_loc, b_swarm)
