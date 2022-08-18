@@ -27,8 +27,29 @@ def test_mc_update_velocity():
     assert np.all(np.abs(vnew) <= vmax)
 
 
+def test_get_v_init():
+    n_dim = 2
+
+    LO, HI = -100, 200
+    ran_key = jran.PRNGKey(TESTING_SEED)
+    n_tests = 50
+    for itest in range(n_tests):
+        v_init_key, xlo_key, xhi_key, ran_key = jran.split(ran_key, 4)
+        xmin = jran.uniform(xlo_key, shape=(n_dim,), minval=LO, maxval=HI)
+        delta = HI - xmin
+        dx = jran.uniform(xlo_key, shape=(n_dim,), minval=0, maxval=delta)
+        xmax = xmin + dx
+        assert np.all(LO < xmin)
+        assert np.all(xmin < xmax)
+        assert np.all(xmax < HI)
+
+        v_init = pso_update._get_v_init(v_init_key, xmin, xmax)
+        vmax = pso_update._get_vmax(xmin, xmax)
+        assert np.all(np.abs(v_init) < vmax)
+
+
 @pytest.mark.skip
-def test_update_particle():
+def test_update_single_particle():
     n_dim = 2
     xmin = np.zeros(n_dim)
     xmax = np.ones(n_dim)
@@ -37,9 +58,12 @@ def test_update_particle():
     x_init_key, v_init_key, x_best_key, ran_key = jran.split(ran_key, 4)
     x = jran.uniform(x_init_key, shape=(n_dim,), minval=xmin, maxval=xmax)
     x_init = np.copy(x)
+
     x_target = jran.uniform(x_best_key, shape=(n_dim,), minval=xmin, maxval=xmax)
+
     dsq_best = pso_update._euclid_dsq(x, x_target)
     dsq_init = np.copy(dsq_best)
+
     v = pso_update._get_v_init(v_init_key, xmin, xmax)
     b_loc = np.copy(x)
     b_swarm = np.copy(x)
@@ -56,15 +80,3 @@ def test_update_particle():
         assert np.all(x <= xmax)
     msg = "x_init = {0}\nx_target = {1}\nx_final={2}\nd_init={3}\nd_best={4}"
     assert False, msg.format(x_init, x_target, x, dsq_init, dsq_best)
-
-
-@pytest.mark.skip
-def test_impose_reflecting_boundary_condition():
-    n_dim = 2
-    xmin = np.zeros(n_dim)
-    xmax = np.ones(n_dim)
-
-    ran_key = jran.PRNGKey(TESTING_SEED)
-    x_init_key, v_init_key, x_best_key, ran_key = jran.split(ran_key, 4)
-
-    xnew, vnew = pso_update.impose_pbcs(x, v, xmin, xmax)
