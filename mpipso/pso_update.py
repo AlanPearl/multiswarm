@@ -4,6 +4,7 @@ from jax import random as jran
 
 INERTIAL_WEIGHT = 0.5 * np.log(2)
 ACC_CONST = 0.5 + np.log(2)
+VMAX_FRAC = 0.5
 
 
 def update_particle(
@@ -99,8 +100,8 @@ def _update_velocity_kern(
     return v
 
 
-def _get_vmax(xmin, xmax):
-    return 0.5 * (xmax - xmin)
+def _get_vmax(xmin, xmax, vmax_frac=VMAX_FRAC):
+    return vmax_frac * (xmax - xmin)
 
 
 def _get_clipped_velocity(v, vmax):
