@@ -19,11 +19,11 @@ def update_particle(
     acc_loc=ACC_CONST,
     acc_swarm=ACC_CONST,
 ):
+    xnew = x + v
     vnew = mc_update_velocity(
         ran_key, x, v, xmin, xmax, b_loc, b_swarm, w, acc_loc, acc_swarm
     )
-    xnew = x + vnew
-    xnew, vnew = _impose_reflecting_boundary_condition(x, v, xmin, xmax)
+    xnew, vnew = _impose_reflecting_boundary_condition(xnew, vnew, xmin, xmax)
     return xnew, vnew
 
 

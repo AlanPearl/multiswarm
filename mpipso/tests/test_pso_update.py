@@ -58,12 +58,12 @@ def get_random_initial_conditions(ran_key, n_dim, xlo=0, xhi=1):
     return xmin, xmax, x_init, v_init, x_target
 
 
-def test_update_single_particle():
+def test_update_single_particle(seed=TESTING_SEED):
     n_dim = 2
-    ran_key = jran.PRNGKey(TESTING_SEED)
+    ran_key = jran.PRNGKey(seed)
     ran_key, init_key = jran.split(ran_key, 2)
-    res = get_random_initial_conditions(init_key, n_dim)
-    xmin, xmax, x_init, v_init, x_target = res
+    init_cond = get_random_initial_conditions(init_key, n_dim)
+    xmin, xmax, x_init, v_init, x_target = init_cond
     x = np.copy(x_init)
     v = np.copy(v_init)
 
@@ -72,6 +72,7 @@ def test_update_single_particle():
     b_loc = np.copy(x_init)
     b_swarm = np.copy(x_init)
 
+    collector = []
     n_updates = 500
     for istep in range(n_updates):
         ran_key, update_key = jran.split(ran_key, 2)
@@ -83,7 +84,9 @@ def test_update_single_particle():
             dsq_best = dsq
         assert np.all(x >= xmin), "x = {0} is below xmin"
         assert np.all(x <= xmax), "x = {0} is above xmax"
+        collector.append((x, v, dsq, dsq_best))
 
+    msg_prefix = ""
     if dsq_best == dsq_init:
         msg_prefix = "Best value did not improve initial value\n"
     elif dsq_best > dsq_init:
