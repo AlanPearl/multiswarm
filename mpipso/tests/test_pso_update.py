@@ -61,7 +61,8 @@ def get_random_initial_conditions(ran_key, n_dim, xlo=0, xhi=1):
 def test_update_single_particle():
     n_dim = 2
     ran_key = jran.PRNGKey(TESTING_SEED)
-    res = get_random_initial_conditions(ran_key, n_dim)
+    ran_key, init_key = jran.split(ran_key, 2)
+    res = get_random_initial_conditions(init_key, n_dim)
     xmin, xmax, x_init, v_init, x_target = res
     x = np.copy(x_init)
     v = np.copy(v_init)
@@ -73,7 +74,8 @@ def test_update_single_particle():
 
     n_updates = 500
     for istep in range(n_updates):
-        x, v = pso_update.update_particle(ran_key, x, v, xmin, xmax, b_loc, b_swarm)
+        ran_key, update_key = jran.split(ran_key, 2)
+        x, v = pso_update.update_particle(update_key, x, v, xmin, xmax, b_loc, b_swarm)
         dsq = pso_update._euclid_dsq(x, x_target)
         if dsq < dsq_best:
             b_loc = x
