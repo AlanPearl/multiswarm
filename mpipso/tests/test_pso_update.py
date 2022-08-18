@@ -48,25 +48,28 @@ def test_get_v_init():
         assert np.all(np.abs(v_init) < vmax)
 
 
-def test_update_single_particle():
-    n_dim = 2
-    xmin = np.zeros(n_dim)
-    xmax = np.ones(n_dim)
-
-    ran_key = jran.PRNGKey(TESTING_SEED)
+def get_random_initial_conditions(ran_key, n_dim, xlo=0, xhi=1):
+    xmin = np.zeros(n_dim) + xlo
+    xmax = np.zeros(n_dim) + xhi
     x_init_key, v_init_key, x_best_key, ran_key = jran.split(ran_key, 4)
     x_init = jran.uniform(x_init_key, shape=(n_dim,), minval=xmin, maxval=xmax)
-    x = np.copy(x_init)
-
-    x_target = jran.uniform(x_best_key, shape=(n_dim,), minval=xmin, maxval=xmax)
-
-    dsq_best = pso_update._euclid_dsq(x, x_target)
-    dsq_init = np.copy(dsq_best)
-
     v_init = pso_update._get_v_init(v_init_key, xmin, xmax)
-    b_loc = np.copy(x)
-    b_swarm = np.copy(x)
+    x_target = jran.uniform(x_best_key, shape=(n_dim,), minval=xmin, maxval=xmax)
+    return xmin, xmax, x_init, v_init, x_target
+
+
+def test_update_single_particle():
+    n_dim = 2
+    ran_key = jran.PRNGKey(TESTING_SEED)
+    res = get_random_initial_conditions(ran_key, n_dim)
+    xmin, xmax, x_init, v_init, x_target = res
+    x = np.copy(x_init)
     v = np.copy(v_init)
+
+    dsq_best = pso_update._euclid_dsq(x_init, x_target)
+    dsq_init = np.copy(dsq_best)
+    b_loc = np.copy(x_init)
+    b_swarm = np.copy(x_init)
 
     n_updates = 500
     for istep in range(n_updates):
