@@ -1,10 +1,29 @@
 """Implementation of PSO algorithm described in arXiv:1108.5600 & arXiv:1310.7034"""
 import numpy as np
 from jax import random as jran
+from mpi4py import MPI
 
 INERTIAL_WEIGHT = 0.5 * np.log(2)
 ACC_CONST = 0.5 + np.log(2)
 VMAX_FRAC = 0.5
+
+
+def get_global_best(comm, x, x_target):
+    rank, nranks = comm.Get_rank(), comm.Get_size()
+    rank_matrix = np.zeros(shape=(nranks, x.size))
+    rank_matrix[rank, :] = x
+    holder_matrix = np.empty_like(rank_matrix)
+    comm.Allreduce(rank_matrix, holder_matrix, op=MPI.SUM)
+    comm.Barrier()
+
+    dx_matrix = holder_matrix - x_target
+    dxsq_matrix = dx_matrix * dx_matrix
+    dsq_ranks = np.sum(dxsq_matrix, axis=1)
+    indx_x_best = np.argmin(dsq_ranks)
+    x_swarm_best = holder_matrix[indx_x_best, :]
+    dsq_swarm_best = np.min(dsq_ranks)
+
+    return x_swarm_best, dsq_swarm_best
 
 
 def update_particle(
