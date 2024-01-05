@@ -3,7 +3,7 @@ import numpy as np
 from jax import random as jran
 from mpi4py import MPI
 
-INERTIAL_WEIGHT = 0.5 * np.log(2)
+INERTIAL_WEIGHT = 0.5 / np.log(2)
 ACC_CONST = 0.5 + np.log(2)
 VMAX_FRAC = 0.5
 
