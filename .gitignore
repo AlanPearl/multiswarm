@@ -105,4 +105,3 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-notebooks/loc_dsq_best_history_0.npy
