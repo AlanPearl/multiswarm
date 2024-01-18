@@ -53,7 +53,7 @@ if __name__ == "__main__":
     for istep in range(n_steps):
         rank_key, update_key = jran.split(rank_key, 2)
         x, v = pso_update.update_particle(
-            update_key, x, v, xmin, xmax, loc_dsq_best, swarm_dsq_best
+            update_key, x, v, xmin, xmax, loc_x_best, swarm_x_best
         )
         istep_dsq = float(pso_update._euclid_dsq(x, x_target))
         istep_x_best, istep_dsq_best = pso_update.get_global_best(comm, x, x_target)
