@@ -1,6 +1,6 @@
 """
 """
-import pytest
+# import pytest
 import numpy as np
 from jax import random as jran
 from .. import pso_update
