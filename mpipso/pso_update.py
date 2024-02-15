@@ -2,6 +2,7 @@
 import numpy as np
 from jax import random as jran
 from mpi4py import MPI
+from smt.sampling_methods import LHS
 
 INERTIAL_WEIGHT = 0.5 / np.log(2)
 ACC_CONST = 0.5 + np.log(2)
@@ -145,6 +146,18 @@ def _impose_reflecting_boundary_condition(x, v, xmin, xmax):
     return x, v
 
 
-def _euclid_dsq(x, y):
-    d = y - x
-    return np.sum(d * d)
+def get_lhs_initial_conditions(numpart, ndim, xlo=0, xhi=1,
+                               maximin=True, ran_key=None):
+    criterion = "maximin" if maximin else "c"
+    if ran_key is None:
+        ran_key = jran.PRNGKey(987654321)
+    xmin = np.zeros(ndim) + xlo
+    xmax = np.zeros(ndim) + xhi
+    xlims = np.array([xmin, xmax]).T
+    x_init_key, v_init_key, ran_key = jran.split(ran_key, 3)
+    x_seed = int(jran.randint(
+        x_init_key, (), 0, 1000000000, dtype=np.uint32))
+    sampler = LHS(xlimits=xlims, criterion=criterion, random_state=x_seed)
+    x_init = sampler(numpart)
+    v_init = _get_v_init(numpart, v_init_key, xmin, xmax)
+    return xmin, xmax, x_init, v_init
