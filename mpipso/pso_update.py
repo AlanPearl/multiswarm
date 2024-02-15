@@ -9,22 +9,27 @@ ACC_CONST = 0.5 + np.log(2)
 VMAX_FRAC = 0.5
 
 
-def get_global_best(comm, x, x_target):
+def get_global_best(comm, x, loss):
     rank, nranks = comm.Get_rank(), comm.Get_size()
-    rank_matrix = np.zeros(shape=(nranks, x.size))
-    rank_matrix[rank, :] = x
-    holder_matrix = np.empty_like(rank_matrix)
-    comm.Allreduce(rank_matrix, holder_matrix, op=MPI.SUM)
-    comm.Barrier()
 
-    dx_matrix = holder_matrix - x_target
-    dxsq_matrix = dx_matrix * dx_matrix
-    dsq_ranks = np.sum(dxsq_matrix, axis=1)
-    indx_x_best = np.argmin(dsq_ranks)
-    x_swarm_best = holder_matrix[indx_x_best, :]
-    dsq_swarm_best = np.min(dsq_ranks)
+    rank_x_matrix = np.zeros(shape=(nranks, x.size))
+    rank_x_matrix[rank, :] = x
+    x_matrix = np.empty_like(rank_x_matrix)
 
-    return x_swarm_best, dsq_swarm_best
+    rank_loss_matrix = np.zeros(shape=(nranks, x.size))
+    rank_loss_matrix[rank, :] = loss
+    loss_matrix = np.empty_like(rank_loss_matrix)
+
+    comm.Allreduce(rank_x_matrix, x_matrix, op=MPI.SUM)
+    comm.Allreduce(rank_loss_matrix, loss_matrix, op=MPI.SUM)
+    # comm.Barrier()
+
+    loss_ranks = np.sum(loss_matrix, axis=1)
+    indx_x_best = np.argmin(loss_ranks)
+    x_swarm_best = x_matrix[indx_x_best, :]
+    loss_swarm_best = np.min(loss_ranks)
+
+    return x_swarm_best, loss_swarm_best
 
 
 def update_particle(
@@ -130,11 +135,11 @@ def _get_clipped_velocity(v, vmax):
     return v
 
 
-def _get_v_init(ran_key, xmin, xmax):
+def _get_v_init(numpart, ran_key, xmin, xmax):
     n_dim = xmin.size
     vmax = _get_vmax(xmin, xmax)
-    u_init = jran.uniform(ran_key, shape=(n_dim,))
-    return u_init * vmax
+    u_init = jran.uniform(ran_key, shape=(numpart, n_dim))
+    return np.array(u_init * vmax)
 
 
 def _impose_reflecting_boundary_condition(x, v, xmin, xmax):
