@@ -2,6 +2,8 @@
 from time import time
 
 import numpy as np
+import jax
+from jax import numpy as jnp
 from jax import random as jran
 from mpi4py import MPI
 # from smt.sampling_methods import LHS
@@ -27,10 +29,12 @@ class ParticleSwarm:
                  vmax_frac=VMAX_FRAC,
                  comm=MPI.COMM_WORLD, seed=None):
         if seed is None and not comm.rank:
+            # WARNING: seed must be given explicitly in jitted functions
             seed = np.random.randint(9999999)
             print(f"No seed given. Choosing at random: {seed=}",
                   flush=True)
-        seed = comm.bcast(seed)
+            seed = comm.bcast(seed)
+        randkey = init_randkey(seed)
         rank, nranks = comm.Get_rank(), comm.Get_size()
         if nparticles > nranks:
             particles_on_this_rank = np.array_split(
@@ -42,10 +46,9 @@ class ParticleSwarm:
             particles_on_this_rank = [particles_on_this_rank]
 
         num_particles_on_this_rank = len(particles_on_this_rank)
-        particle_keys = [jran.PRNGKey(1 + pr + seed) for pr in
-                         particles_on_this_rank]
-        global_key = jran.PRNGKey(seed)
-        global_key, init_key = jran.split(global_key, 2)
+        init_key, *particle_keys = jran.split(
+            randkey, nparticles + 1)
+        particle_keys = [particle_keys[i] for i in particles_on_this_rank]
         init_cond = get_lhs_initial_conditions(
             nparticles, ndim, xlo=xlow, xhi=xhigh,
             vmax_frac=vmax_frac, ran_key=init_key)
@@ -336,3 +339,15 @@ def get_lhs_initial_conditions(numpart, ndim, xlo=0, xhi=1, random_cd=True,
     x_init = qmc.scale(x_init, xmin, xmax)
     v_init = _get_v_init(numpart, v_init_key, xmin, xmax, vmax_frac)
     return xmin, xmax, x_init, v_init
+
+
+def init_randkey(randkey) -> jax.Array:
+    """Check that randkey is a PRNG key or create one from an int"""
+    if isinstance(randkey, int):
+        randkey = jran.key(randkey)
+    else:
+        msg = f"Invalid {type(randkey)=}: Must be int or PRNG Key"
+        assert hasattr(randkey, "dtype"), msg
+        assert jnp.issubdtype(randkey.dtype, jax.dtypes.prng_key), msg
+
+    return randkey
