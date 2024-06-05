@@ -4,14 +4,13 @@ The Ackley loss function is a 2D loss function with a global
 minimum of f(0, 0) = 0, but very many local minima. It can be
 extended up to arbitrary dimensionality.
 """
-from time import time
 import argparse
 from mpi4py import MPI
 # import jax
-from jax import random as jran
 import jax.numpy as jnp
 import numpy as np
-from mpipso import pso_update
+
+from mpipso import ParticleSwarm
 
 
 def quadratic(x_array):
@@ -51,102 +50,59 @@ if __name__ == "__main__":
     parser.add_argument("--max-nsteps", type=int, default=100)
     parser.add_argument("--ndim", type=int, default=2)
     parser.add_argument("--num-particles", type=int, default=20)
-    # parser.add_argument("--ranks-per-particle", type=eval, default=1)
+    parser.add_argument("--inertial", type=float, default=1.0)
+    parser.add_argument("--cognitive", type=float, default=1.0)
+    parser.add_argument("--social", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--outfile", default=None)
+    parser.add_argument("--out", default=None)
     args = parser.parse_args()
 
+    comm = MPI.COMM_WORLD
     objfunc_name = args.objective_func.lower()
     objfunc = objfunc_options[objfunc_name]
     max_nsteps, ndim = args.max_nsteps, args.ndim
-    numpart = args.num_particles
-    # ranks_per_part = args.ranks_per_particle
-    particles_per_rank = 1
-    ranks_per_particle = 1
-    xlo, xhi = -5, 5
-
-    comm = MPI.COMM_WORLD
-    rank, nranks = comm.Get_rank(), comm.Get_size()
-
-    rank_key = jran.PRNGKey(1 + rank + args.seed)
-    global_key = jran.PRNGKey(args.seed)
-    global_key, init_key = jran.split(global_key, 2)
-    init_cond = pso_update.get_lhs_initial_conditions(
-        numpart, ndim, xlo=xlo, xhi=xhi, ran_key=init_key)
-    xmin, xmax, x_init, v_init = init_cond
-    if not rank:
-        print("x_init =", x_init)
-        print("v_init =", v_init)
-
-    # This way would keep the particle dimension
-    # x = x_init = np.array_split(x_init, nranks, axis=0)[rank]
-    # v = v_init = np.array_split(v_init, nranks, axis=0)[rank]
-
-    # For now, let's index out the particle dimension (aka 1 particle per rank)
-    x = x_init = x_init[rank]
-    v = v_init = v_init[rank]
-
-    loc_loss_init = objfunc(x_init)
-    loc_loss_best = np.copy(loc_loss_init)
-    loc_x_best = np.copy(x)
-    # comm.Barrier()
-
-    swarm_x_best, swarm_loss_best = pso_update.get_global_best(
-        comm, x_init, loc_loss_init)
-
-    loc_x_history = []
-    loc_v_history = []
-    loc_loss_history = []
-    istep = -1
-    start = time()
-    for istep in range(max_nsteps):
-        if not rank:
-            print(f"- Best loss={swarm_loss_best} at x={swarm_x_best}"
-                  f" for t={istep}", flush=True)
-
-        rank_key, update_key = jran.split(rank_key, 2)
-        rank_key = update_key
-        x, v = pso_update.update_particle(
-            update_key, x, v, xmin, xmax, loc_x_best, swarm_x_best
-        )
-        istep_loss = objfunc(x)
-        istep_x_best, istep_loss_best = pso_update.get_global_best(
-            comm, x, istep_loss)
-
-        if istep_loss_best < swarm_loss_best:
-            swarm_loss_best = istep_loss_best
-            swarm_x_best = istep_x_best
-
-        if istep_loss < loc_loss_best:
-            loc_loss_best = istep_loss
-            loc_x_best = x
-
-        loc_x_history.append(x)
-        loc_v_history.append(v)
-        loc_loss_history.append(istep_loss)
-        # comm.Barrier()
-
-    end = time()
-    runtime = end - start
-    if not rank:
-        print(f"Finished {istep + 1} steps in {runtime} seconds")
-
-    outfile = args.outfile
+    nparticles = args.num_particles
+    inertial = args.inertial
+    cognitive = args.cognitive
+    social = args.social
+    xlo, xhi = -4.5, 4.5
+    seed = args.seed
+    outfile = args.out
     if outfile is None:
         outfile = f"pso_results_{objfunc_name}.npz"
 
-    swarm_x_history = np.array(comm.allgather(
-        loc_x_history)).swapaxes(0, 1)
-    swarm_v_history = np.array(comm.allgather(
-        loc_v_history)).swapaxes(0, 1)
-    swarm_loss_history = np.array(comm.allgather(
-        loc_loss_history)).swapaxes(0, 1)
+    swarm = ParticleSwarm(
+        nparticles, ndim, xlo, xhi, inertial_weight=inertial,
+        cognitive_weight=cognitive, social_weight=social,
+        comm=comm, seed=seed)
 
-    if not rank:
+    # CASES TO SUPPORT:
+    # - Original use case: 3 particles on 3 ranks
+    # `mpiexec -n 3 ... --num-particles 10`
+    # => ranks_per_particle=1 | particles_per_rank=1
+    # - 10 particles distributed across 1, 2, or 3 ranks
+    # `mpiexec -n [1,2,3] ... --num-particles 10`
+    # => ranks_per_particle=1 | particles_per_rank=[10,5,3-4]
+    # - 10 ranks distributed across 1, 2, or 3 particles
+    # `mpiexec -n 10 ... --num-particles [1,2,3]`
+    # => ranks_per_particle=[10,5,3-4] | particles_per_rank=1
+
+    # if not comm.rank:
+    # print("x_init =", swarm.x_init)
+    # print("v_init =", swarm.v_init)
+
+    results = swarm.run_pso(
+        objfunc, max_nsteps)
+
+    if not comm.rank:
+        init_best_loss = results["swarm_loss_history"][0].min()
+        best_loss = results["swarm_loss_history"].min()
+        print(f"Initial best loss: {init_best_loss}", flush=True)
+        print(f"Final best loss: {best_loss}", flush=True)
         np.savez(
             outfile,
-            x_histories=swarm_x_history,
-            v_histories=swarm_v_history,
-            loss_histories=swarm_loss_history,
-            runtime=runtime
+            x_histories=results["swarm_x_history"],
+            v_histories=results["swarm_v_history"],
+            loss_histories=results["swarm_loss_history"],
+            runtime=results["runtime"]
         )
