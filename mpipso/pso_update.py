@@ -28,12 +28,11 @@ class ParticleSwarm:
                  social_weight=SOCIAL_WEIGHT,
                  vmax_frac=VMAX_FRAC,
                  comm=MPI.COMM_WORLD, seed=None):
-        if seed is None and not comm.rank:
+        if seed is None:
             # WARNING: seed must be given explicitly in jitted functions
-            seed = np.random.randint(9999999)
-            print(f"No seed given. Choosing at random: {seed=}",
+            seed = 0
+            print(f"No seed given. Setting by default: {seed=}",
                   flush=True)
-            seed = comm.bcast(seed)
         randkey = init_randkey(seed)
         rank, nranks = comm.Get_rank(), comm.Get_size()
         if nparticles > nranks:
