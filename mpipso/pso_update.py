@@ -22,20 +22,62 @@ VMAX_FRAC = 0.4
 
 
 class ParticleSwarm:
-    def __init__(self, nparticles, ndim, xlow, xhigh,
+    def __init__(self, nparticles, ndim, xlow, xhigh, seed=0,
                  inertial_weight=INERTIAL_WEIGHT,
                  cognitive_weight=COGNITIVE_WEIGHT,
                  social_weight=SOCIAL_WEIGHT,
                  vmax_frac=VMAX_FRAC,
-                 comm=MPI.COMM_WORLD, seed=None):
-        if seed is None:
-            # WARNING: seed must be given explicitly in jitted functions
-            seed = 0
-            print(f"No seed given. Setting by default: {seed=}",
-                  flush=True)
+                 ranks_per_particle=None,
+                 comm=MPI.COMM_WORLD):
+        """
+        Initialize particles and MPI communicators to be used for PSO
+
+        Parameters
+        ----------
+        nparticles : int
+            Number of particles (~100+ recommended)
+        ndim : int
+            Dimensionality (i.e. number of model parameters to fit)
+        xlow : int | Array[int]
+            Lower bounds on each parameter
+        xhigh : int | Array[int]
+            Upper bounds on each parameter
+        seed : int | PRNGKey, optional
+            Seed for all pseudo-randomness, by default 0
+        inertial_weight : float, optional
+            Retain this fraction of the velocity from previous timestep, by
+            default 1.0
+        cognitive_weight : float, optional
+            Weight pulling particles towards their personal best location ever
+            found, by default 0.21
+        social_weight : float, optional
+            Weight pulling particles towards the global best location ever
+            found, recommended ~1/3 of `cognitive_weight`, by default 0.07
+        vmax_frac : float, optional
+            Maximum velocity particles are allowed to travel, as a fraction of
+            their box width per dimension, by default 0.4
+        ranks_per_particle : int, optional
+            Set this to manually control intra-particle parallelization, even
+            if there are not enough ranks for nparticles * ranks_per_particle.
+            By default (None), inter-particle parallelization is prioritized
+        comm : MPI.Comm, optional
+            MPI Communicator, by default COMM_WORLD
+        """
         randkey = init_randkey(seed)
         rank, nranks = comm.Get_rank(), comm.Get_size()
-        if nparticles > nranks:
+        if ranks_per_particle is not None:
+            # Set this to manually control intra-particle parallelization vs
+            # inter-particle parallelization, even when there are not enough
+            # ranks for nparticles * ranks_per_particle. By default,
+            # inter-particle parallelization is prioritized.
+            num_groups = comm.size / ranks_per_particle
+            msg = "comm.size must be a multiple of ranks_per_particle"
+            assert not num_groups % 1, msg
+            num_groups = int(num_groups)
+            subcomm, _, group_rank = split_subcomms(num_groups, comm=comm)
+            particles_on_this_rank = np.array_split(
+                np.arange(nparticles), num_groups)[group_rank].tolist()
+        elif nparticles > nranks:
             particles_on_this_rank = np.array_split(
                 np.arange(nparticles), nranks)[rank].tolist()
             subcomm = None
@@ -68,15 +110,45 @@ class ParticleSwarm:
         self.social_weight = social_weight
         self.vmax_frac = vmax_frac
 
-    def run_pso(self, objfunc, nsteps=100):
+    def run_pso(self, lossfunc, nsteps=100, keep_init_random_state=False):
+        """
+        Run particle swarm optimization (PSO)
+
+        Parameters
+        ----------
+        lossfunc : callable
+            The function we want to find the global minimum of. To be called
+            with signature `lossfunc(x)` where x is an array of shape `(ndim,)`
+        nsteps : int, optional
+            Number of time step iterations, by default 100
+        keep_init_random_state : bool, optional
+            Set True to be able to rerun an identical run, or False (default)
+            to continue a run by manually setting swarm.x_init and swarm.v_init
+
+        Returns
+        -------
+        Results dictionary with the following keys:
+            "swarm_x_history" : np.ndarray of shape (nsteps, nparticles, ndim)
+                Position of all particles (trial params) at each time step
+            "swarm_v_history": np.ndarray of shape (nsteps, nparticles, ndim)
+                Velocity of all particles at each time step
+            "swarm_loss_history": np.ndarray of shape (nsteps, nparticles)
+                Loss of all particles at each time step
+            "runtime": float
+                Time in seconds, as measured on each rank, to perform PSO
+        """
+        if keep_init_random_state:
+            particle_keys = self.particle_keys.copy()
+        else:
+            particle_keys = self.particle_keys
+
         x = [self.x_init[pr] for pr in self.particles_on_this_rank]
         v = [self.v_init[pr] for pr in self.particles_on_this_rank]
 
-        loc_loss_best = [objfunc(xi) for xi in x]
+        loc_loss_best = [lossfunc(xi) for xi in x]
         loc_x_best = [np.copy(xi) for xi in x]
-        # comm.Barrier()
 
-        swarm_x_best, swarm_loss_best = self.get_global_best(x, loc_loss_best)
+        swarm_x_best, swarm_loss_best = self._get_global_best(x, loc_loss_best)
 
         loc_x_history = [[] for _ in range(self.num_particles_on_this_rank)]
         loc_v_history = [[] for _ in range(self.num_particles_on_this_rank)]
@@ -96,15 +168,15 @@ class ParticleSwarm:
 
             istep_loss = [None for _ in range(self.num_particles_on_this_rank)]
             for ip in range(self.num_particles_on_this_rank):
-                update_key = jran.split(self.particle_keys[ip], 1)[0]
-                self.particle_keys[ip] = update_key
+                update_key = jran.split(particle_keys[ip], 1)[0]
+                particle_keys[ip] = update_key
                 x[ip], v[ip] = update_particle(
                     update_key, x[ip], v[ip], self.xmin, self.xmax,
                     loc_x_best[ip], swarm_x_best, self.inertial_weight,
                     self.cognitive_weight, self.social_weight, self.vmax_frac
                 )
-                istep_loss[ip] = objfunc(x[ip])
-            istep_x_best, istep_loss_best = self.get_global_best(x, istep_loss)
+                istep_loss[ip] = lossfunc(x[ip])
+            istep_x_best, istep_loss_best = self._get_global_best(x, istep_loss)
 
             for ip in range(self.num_particles_on_this_rank):
                 if istep_loss_best <= swarm_loss_best:
@@ -118,7 +190,6 @@ class ParticleSwarm:
                 loc_x_history[ip].append(x[ip])
                 loc_v_history[ip].append(v[ip])
                 loc_loss_history[ip].append(istep_loss[ip])
-            # comm.Barrier()
 
             # anneal = annealing_frac * self.inertial_weight
             # self.inertial_weight -= anneal
@@ -128,6 +199,13 @@ class ParticleSwarm:
         runtime = end - start
         if not self.comm.rank:
             print(f"Finished {istep + 1} steps in {runtime} seconds")
+
+        if self.subcomm is not None and self.subcomm.rank > 0:
+            # Only concatenate particles from the ROOT of each subcomm
+            loc_x_history = np.zeros(shape=(0, *np.shape(loc_x_history[0])))
+            loc_v_history = np.zeros(shape=(0, *np.shape(loc_v_history[0])))
+            loc_loss_history = np.zeros(
+                shape=(0, *np.shape(loc_loss_history[0])))
 
         swarm_x_history = np.concatenate(self.comm.allgather(
             loc_x_history), axis=0).swapaxes(0, 1)
@@ -143,10 +221,14 @@ class ParticleSwarm:
             "runtime": runtime
         }
 
-    def get_global_best(self, x, loss):
+    def _get_global_best(self, x, loss):
+        if self.subcomm is not None and self.subcomm.rank > 0:
+            # Only concatenate particles from the ROOT of each subcomm
+            x = np.zeros(shape=(0, *np.shape(x[0])))
+            loss = np.zeros(shape=(0, *np.shape(loss[0])))
+
         all_x = np.concatenate(self.comm.allgather(x))
         all_loss = np.concatenate(self.comm.allgather(loss))
-        # comm.Barrier()
 
         best_particle = np.argmin(all_loss)
         best_x = all_x[best_particle, :]
@@ -155,27 +237,32 @@ class ParticleSwarm:
         return best_x, best_loss
 
 
-# def get_global_best(comm, x, loss):
-#     rank, nranks = comm.Get_rank(), comm.Get_size()
+def get_best_loss_and_params(loss_history, params_history):
+    """
+    Return the best loss and its corresponding parameters
+    from the full results arrays returned by run_pso()
 
-#     rank_x_matrix = np.zeros(shape=(nranks, x.size))
-#     rank_x_matrix[rank, :] = x
-#     x_matrix = np.empty_like(rank_x_matrix)
+    Parameters
+    ----------
+    loss_history : Array[float] of shape (nsteps, nparticles)
+        Loss of all particles at each time, given by "swarm_loss_history"
+    params_history : Array[float] of shape (nsteps, nparticles, ndim)
+        Position of all particles at each time, given by "swarm_x_history"
 
-#     rank_loss_matrix = np.zeros(shape=(nranks, x.size))
-#     rank_loss_matrix[rank, :] = loss
-#     loss_matrix = np.empty_like(rank_loss_matrix)
+    Returns
+    -------
+    float
+        Minimum loss value
+    nd.ndarray[float]
+        Parameters that produced the minimum loss
+    """
+    loss_history = np.ravel(loss_history)
+    params_history = np.reshape(params_history, (*loss_history.shape, -1))
 
-#     comm.Allreduce(rank_x_matrix, x_matrix, op=MPI.SUM)
-#     comm.Allreduce(rank_loss_matrix, loss_matrix, op=MPI.SUM)
-#     # comm.Barrier()
-
-#     loss_ranks = np.sum(loss_matrix, axis=1)
-#     indx_x_best = np.argmin(loss_ranks)
-#     x_swarm_best = x_matrix[indx_x_best, :]
-#     loss_swarm_best = np.min(loss_ranks)
-
-#     return x_swarm_best, loss_swarm_best
+    best_arg = np.argmin(loss_history)
+    best_loss = loss_history[best_arg]
+    best_params = params_history[best_arg, :]
+    return best_loss, best_params
 
 
 def update_particle(

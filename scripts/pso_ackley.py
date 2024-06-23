@@ -50,6 +50,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-nsteps", type=int, default=100)
     parser.add_argument("--ndim", type=int, default=2)
     parser.add_argument("--num-particles", type=int, default=20)
+    parser.add_argument("--ranks-per-particle", type=int, default=None)
     parser.add_argument("--inertial", type=float, default=1.0)
     parser.add_argument("--cognitive", type=float, default=1.0)
     parser.add_argument("--social", type=float, default=1.0)
@@ -62,6 +63,7 @@ if __name__ == "__main__":
     objfunc = objfunc_options[objfunc_name]
     max_nsteps, ndim = args.max_nsteps, args.ndim
     nparticles = args.num_particles
+    ranks_per_particle = args.ranks_per_particle
     inertial = args.inertial
     cognitive = args.cognitive
     social = args.social
@@ -72,13 +74,13 @@ if __name__ == "__main__":
         outfile = f"pso_results_{objfunc_name}.npz"
 
     swarm = ParticleSwarm(
-        nparticles, ndim, xlo, xhi, inertial_weight=inertial,
-        cognitive_weight=cognitive, social_weight=social,
-        comm=comm, seed=seed)
+        nparticles, ndim, xlo, xhi, seed=seed, inertial_weight=inertial,
+        cognitive_weight=cognitive, social_weight=social, comm=comm,
+        ranks_per_particle=ranks_per_particle)
 
-    # CASES TO SUPPORT:
+    # CASES SUPPORTED:
     # - Original use case: 3 particles on 3 ranks
-    # `mpiexec -n 3 ... --num-particles 10`
+    # `mpiexec -n 3 ... --num-particles 3`
     # => ranks_per_particle=1 | particles_per_rank=1
     # - 10 particles distributed across 1, 2, or 3 ranks
     # `mpiexec -n [1,2,3] ... --num-particles 10`
@@ -86,10 +88,8 @@ if __name__ == "__main__":
     # - 10 ranks distributed across 1, 2, or 3 particles
     # `mpiexec -n 10 ... --num-particles [1,2,3]`
     # => ranks_per_particle=[10,5,3-4] | particles_per_rank=1
-
-    # if not comm.rank:
-    # print("x_init =", swarm.x_init)
-    # print("v_init =", swarm.v_init)
+    # NEW CASES SUPPORTED ARE NOW SUPPORTED:
+    # - Explicit intra-particle parallelization if `ranks_per_particle` is set
 
     results = swarm.run_pso(
         objfunc, max_nsteps)

@@ -2,6 +2,9 @@
 This example script converges well with 3 particles.
 To use 2 ranks per particle, run:
 >>> mpiexec -n 6 python pso_multidiff.py --num-particles 3
+Can also explicitly set 2 ranks per particle, even if there are too many
+particles to assign one particle per rank:
+>>> mpiexec -n 6 python pso_multidiff.py --num-particles 30 --ranks-per-particle 2
 """
 import argparse
 import time
@@ -95,13 +98,14 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--num-halos", type=int, default=10_000)
 parser.add_argument("--num-steps", type=int, default=100)
 parser.add_argument("--num-particles", type=int, default=1)
-# parser.add_argument("--learning-rate", type=float, default=1e-3)
+parser.add_argument("--ranks-per-particle", type=int, default=None)
 
 if __name__ == "__main__":
     args = parser.parse_args()
     swarm = mpipso.ParticleSwarm(
         nparticles=args.num_particles, ndim=2,
-        xlow=[-4, 1e-3], xhigh=[1, 3.0])
+        xlow=[-4, 1e-3], xhigh=[1, 3.0], seed=0,
+        ranks_per_particle=args.ranks_per_particle)
     particle_comm = swarm.subcomm
     data = dict(
         log_halo_masses=jnp.log10(load_halo_masses(
@@ -119,18 +123,15 @@ if __name__ == "__main__":
     guess = swarm.x_init[0]
     t0 = time.time()
     results = swarm.run_pso(model.calc_loss_from_params, nsteps=args.num_steps)
-    # gd_iterations = model.run_simple_grad_descent(
-    #     guess=guess, nsteps=args.num_steps, learning_rate=args.learning_rate)
-    # gd_loss, gd_params = gd_iterations.loss, gd_iterations.params
-    gd_loss = results["swarm_loss_history"].flatten()
-    gd_params = results["swarm_x_history"].reshape(
-        (*gd_loss.shape, -1))
+    swarm_loss = results["swarm_loss_history"].flatten()
+    swarm_params = results["swarm_x_history"].reshape(
+        (*swarm_loss.shape, -1))
     t = time.time() - t0
 
     # Parallel calculations needed for plots
     # ======================================
     truth = ParamTuple(log_shmrat=-2.0, sigma_logsm=0.2)
-    final = ParamTuple(*gd_params[-1].tolist())
+    final = ParamTuple(*swarm_params[-1].tolist())
     guess_smf = model.calc_sumstats_from_params(guess)
     true_smf = model.calc_sumstats_from_params(truth)
     final_smf = model.calc_sumstats_from_params(final)
@@ -145,6 +146,7 @@ if __name__ == "__main__":
         print(f"Final solution: {final}", flush=True)
         print(f"Truth: {truth}", flush=True)
         print(f"True SMF: {repr(true_smf)}", flush=True)
+        print(f"{swarm_loss.shape=}, {swarm_params.shape=}")
 
         # Plot the HMF
         logmh_min, logmh_max = logmh_per_rank[0][0], logmh_per_rank[-1][-1]
@@ -173,30 +175,30 @@ if __name__ == "__main__":
         plt.clf()
 
         # Plot the loss at each iteration of the grad-descent
-        plt.plot(gd_loss)
+        plt.plot(swarm_loss)
         plt.semilogy()
         plt.xlabel("$N_{\\rm step}$", fontsize=16)
         plt.ylabel("$\\chi_\\nu^2$ loss", fontsize=16)
-        plt.savefig("gd_loss.png", bbox_inches="tight")
+        plt.savefig("swarm_loss.png", bbox_inches="tight")
         plt.clf()
 
         # Plot the params at each iteration of the grad-descent
-        nrows = gd_params.shape[1]
+        nrows = swarm_params.shape[1]
         fig, axes = plt.subplots(nrows=nrows, figsize=(6.4, 4*nrows))
         for i in range(nrows):
-            axes[i].plot(gd_params[:, i], label=ParamTuple._fields[i])
+            axes[i].plot(swarm_params[:, i], label=ParamTuple._fields[i])
             axes[i].axhline(truth[i], color="r", ls="--", label="truth")
             if i == nrows - 1:
                 axes[i].set_xlabel("$N_{\\rm step}$", fontsize=16)
             axes[i].set_ylabel(ParamTuple._fields[i], fontsize=16)
-        plt.savefig("gd_param.png", bbox_inches="tight")
+        plt.savefig("swarm_param.png", bbox_inches="tight")
         plt.clf()
 
         # Plot a plot of the 2D path the parameters take
-        plt.scatter(gd_params[:, 0], gd_params[:, 1], s=2)
+        plt.scatter(swarm_params[:, 0], swarm_params[:, 1], s=2)
         plt.plot(*truth, "rx", label="Truth")
         plt.xlabel(ParamTuple._fields[0], fontsize=16)
         plt.ylabel(ParamTuple._fields[1], fontsize=16)
         plt.legend(frameon=False, fontsize=16)
-        plt.savefig("gd_param_path.png", bbox_inches="tight")
+        plt.savefig("swarm_param_path.png", bbox_inches="tight")
         plt.clf()

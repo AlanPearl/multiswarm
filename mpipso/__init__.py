@@ -1,3 +1,3 @@
-from .pso_update import ParticleSwarm
+from .pso_update import ParticleSwarm, get_best_loss_and_params
 
-__all__ = ["ParticleSwarm"]
+__all__ = ["ParticleSwarm", "get_best_loss_and_params"]
