@@ -1,14 +1,15 @@
 import math
 
-from mpi4py import MPI
 import numpy as np
 
-
-COMM = MPI.COMM_WORLD
+try:
+    from mpi4py.MPI import COMM_WORLD
+except ImportError:
+    COMM_WORLD = None
 
 
 def split_subcomms(num_groups=None, ranks_per_group=None,
-                   comm=COMM):
+                   comm=COMM_WORLD):
     """
     Split comm into sub-comms (not grouped by nodes)
 

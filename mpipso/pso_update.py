@@ -1,17 +1,21 @@
-"""Implementation of PSO algorithm described in arXiv:1108.5600 & arXiv:1310.7034"""
+"""Implementation of PSO algorithm described in arXiv:1108.5600 & arXiv:1310.7034"""  # noqa
 from time import time
 
 import numpy as np
 import jax
 from jax import numpy as jnp
 from jax import random as jran
-from mpi4py import MPI
 # from smt.sampling_methods import LHS
 from scipy.stats import qmc
 
 import tqdm.auto as tqdm
 
 from mpipso.mpi_utils import split_subcomms
+
+try:
+    from mpi4py.MPI import COMM_WORLD
+except ImportError:
+    COMM_WORLD = None
 
 # INERTIAL_WEIGHT = (0.5 / np.log(2))
 # ACC_CONST = (0.5 + np.log(2))
@@ -28,7 +32,7 @@ class ParticleSwarm:
                  social_weight=SOCIAL_WEIGHT,
                  vmax_frac=VMAX_FRAC,
                  ranks_per_particle=None,
-                 comm=MPI.COMM_WORLD):
+                 comm=COMM_WORLD):
         """
         Initialize particles and MPI communicators to be used for PSO
 
@@ -63,6 +67,7 @@ class ParticleSwarm:
         comm : MPI.Comm, optional
             MPI Communicator, by default COMM_WORLD
         """
+        assert comm is not None, "Please install mpi4py"
         randkey = init_randkey(seed)
         rank, nranks = comm.Get_rank(), comm.Get_size()
         if ranks_per_particle is not None:
@@ -176,7 +181,8 @@ class ParticleSwarm:
                     self.cognitive_weight, self.social_weight, self.vmax_frac
                 )
                 istep_loss[ip] = lossfunc(x[ip])
-            istep_x_best, istep_loss_best = self._get_global_best(x, istep_loss)
+            istep_x_best, istep_loss_best = self._get_global_best(
+                x, istep_loss)
 
             for ip in range(self.num_particles_on_this_rank):
                 if istep_loss_best <= swarm_loss_best:
@@ -197,8 +203,6 @@ class ParticleSwarm:
 
         end = time()
         runtime = end - start
-        if not self.comm.rank:
-            print(f"Finished {istep + 1} steps in {runtime} seconds")
 
         if self.subcomm is not None and self.subcomm.rank > 0:
             # Only concatenate particles from the ROOT of each subcomm

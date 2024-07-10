@@ -1,0 +1,4 @@
+nbsphinx
+IPython
+matplotlib
+ipykernel
