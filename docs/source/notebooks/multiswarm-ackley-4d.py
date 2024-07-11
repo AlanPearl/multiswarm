@@ -1,5 +1,5 @@
 """
-mpipso-ackley-4d.py
+multiswarm-ackley-4d.py
 """
 
 import jax.numpy as jnp
@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpi4py import MPI
 
-import mpipso
+import multiswarm
 
 
 def ackley(x_array):
@@ -33,10 +33,10 @@ def plot_ackley2d(extent=(-5, 5, -5, 5), res=0.01,
 
 
 if __name__ == "__main__":
-    swarm = mpipso.ParticleSwarm(nparticles=100, ndim=4, xlow=-5, xhigh=5)
+    swarm = multiswarm.ParticleSwarm(nparticles=100, ndim=4, xlow=-5, xhigh=5)
     results = swarm.run_pso(ackley, nsteps=100)
 
-    best_loss, best_params = mpipso.get_best_loss_and_params(
+    best_loss, best_params = multiswarm.get_best_loss_and_params(
         results["swarm_loss_history"], results["swarm_x_history"])
 
     if not MPI.COMM_WORLD.rank:

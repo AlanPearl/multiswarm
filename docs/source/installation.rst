@@ -3,7 +3,7 @@ Installation Instructions
 
 Installation
 ------------
-``pip install mpipso``
+``pip install multiswarm``
 
 Prerequisites
 -------------
@@ -18,4 +18,4 @@ Example installation with conda env:
     conda create -n py312 python=3.12
     conda activate py312
     conda install -c conda-forge mpi4py
-    pip install mpipso
+    pip install multiswarm

@@ -3,11 +3,11 @@
 API Reference
 =============
 
-``mpipso``
--------------
+``multiswarm``
+--------------
 
-.. autoclass:: mpipso.ParticleSwarm
+.. autoclass:: multiswarm.ParticleSwarm
     :members:
     :special-members: __init__
 
-.. autofunction:: mpipso.get_best_loss_and_params
+.. autofunction:: multiswarm.get_best_loss_and_params

@@ -5,8 +5,8 @@ import argparse
 from mpi4py import MPI
 from jax import random as jran
 import numpy as np
-from mpipso import pso_update
-from mpipso.tests.test_pso_update import get_random_initial_conditions
+from multiswarm import pso_update
+from multiswarm.tests.test_pso_update import get_random_initial_conditions
 
 if __name__ == "__main__":
 
@@ -26,11 +26,13 @@ if __name__ == "__main__":
 
     rank_key = jran.PRNGKey(rank + args.init_seed)
     rank_key, init_key = jran.split(rank_key, 2)
-    init_cond = get_random_initial_conditions(init_key, n_dim, xlo=xlo, xhi=xhi)
+    init_cond = get_random_initial_conditions(
+        init_key, n_dim, xlo=xlo, xhi=xhi)
     xmin, xmax, x_init, v_init, __ = init_cond
 
     target_key = jran.PRNGKey(args.target_seed)
-    x_target = jran.uniform(target_key, minval=xmin, maxval=xmax, shape=(n_dim,))
+    x_target = jran.uniform(target_key, minval=xmin,
+                            maxval=xmax, shape=(n_dim,))
     np.save("x_target", x_target)
 
     x = np.copy(x_init)
@@ -43,7 +45,8 @@ if __name__ == "__main__":
     loc_x_best = np.copy(x)
     comm.Barrier()
 
-    swarm_x_best, swarm_dsq_best = pso_update.get_global_best(comm, x, x_target)
+    swarm_x_best, swarm_dsq_best = pso_update.get_global_best(
+        comm, x, x_target)
 
     loc_dsq_best_history = []
     swarm_dsq_best_history = []
@@ -56,7 +59,8 @@ if __name__ == "__main__":
             update_key, x, v, xmin, xmax, loc_x_best, swarm_x_best
         )
         istep_dsq = float(pso_update._euclid_dsq(x, x_target))
-        istep_x_best, istep_dsq_best = pso_update.get_global_best(comm, x, x_target)
+        istep_x_best, istep_dsq_best = pso_update.get_global_best(
+            comm, x, x_target)
 
         if istep_dsq_best < swarm_dsq_best:
             swarm_dsq_best = istep_dsq_best

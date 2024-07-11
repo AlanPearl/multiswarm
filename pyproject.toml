@@ -1,5 +1,5 @@
 [project]
-name = "mpipso"
+name = "multiswarm"
 authors = [
     {name = "Alan Pearl", email = "alanpearl13@gmail.com"},
     {name = "Andrew Hearin", email = "ahearin@anl.gov"}
@@ -15,16 +15,16 @@ dynamic = ["dependencies", "version"]
 dependencies = {file = ["requirements.txt"]}
 
 [project.urls]
-home = "https://github.com/AlanPearl/mpipso"
+home = "https://github.com/AlanPearl/multiswarm"
 
 [tool.setuptools_scm]
-write_to = "mpipso/_version.py"
+write_to = "multiswarm/_version.py"
 write_to_template = "__version__ = '{version}'"
 
 [tool.setuptools]
 include-package-data = true
 packages = {find = {exclude=["tests*", "scripts*", "docs*", "notebooks*"]}}
-package-dir = {mpipso = "mpipso"}
+package-dir = {multiswarm = "multiswarm"}
 
 [build-system]
 requires = [

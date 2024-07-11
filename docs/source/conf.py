@@ -7,11 +7,11 @@ from pkg_resources import get_distribution
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 try:
-    __version__ = get_distribution("mpipso").version
+    __version__ = get_distribution("multiswarm").version
 except:  # noqa
     __version__ = "unknown version"
 
-project = 'mpipso'
+project = 'multiswarm'
 copyright = '2024, Alan Pearl'
 author = 'Alan Pearl'
 version = __version__

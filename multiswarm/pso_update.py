@@ -10,7 +10,7 @@ from scipy.stats import qmc
 
 import tqdm.auto as tqdm
 
-from mpipso.mpi_utils import split_subcomms
+from multiswarm.mpi_utils import split_subcomms
 
 try:
     from mpi4py.MPI import COMM_WORLD

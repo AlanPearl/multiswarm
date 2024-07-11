@@ -10,7 +10,7 @@ from mpi4py import MPI
 import jax.numpy as jnp
 import numpy as np
 
-from mpipso import ParticleSwarm
+from multiswarm import ParticleSwarm
 
 
 def quadratic(x_array):
