@@ -16,22 +16,6 @@ def ackley(x_array):
     return 20 + jnp.e - a - b
 
 
-def plot_ackley2d(extent=(-5, 5, -5, 5), res=0.01,
-                  ax=None, add_cbar=True):
-    if ax is None:
-        ax = plt.gca()
-    x = np.arange(*extent[:2], res)
-    y = np.arange(*extent[2:], res)
-    x, y = np.meshgrid(x, y)
-    z = ackley(np.array([x, y]))
-    im = ax.imshow(z, cmap="RdBu", extent=extent, origin="lower")
-
-    ax.contour(x, y, z, np.linspace(1, z.max(), 10), linewidths=0.5,
-               cmap=plt.matplotlib.cm.Set2)
-    if add_cbar:
-        plt.colorbar(im, ax=ax).set_label("Loss (2D Projection)", fontsize=14)
-
-
 if __name__ == "__main__":
     swarm = multiswarm.ParticleSwarm(nparticles=100, ndim=4, xlow=-5, xhigh=5)
     results = swarm.run_pso(ackley, nsteps=100)
