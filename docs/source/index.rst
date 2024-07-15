@@ -6,6 +6,10 @@
 Welcome to multiswarm's documentation!
 ==================================
 
+multiswarm is an MPI-parallelized implementation of Particle Swarm Optimization
+(PSO). The code is open-source and available on
+`GitHub <https://github.com/AlanPearl/multiswarm>`__.
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
