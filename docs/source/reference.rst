@@ -11,3 +11,5 @@ API Reference
     :special-members: __init__
 
 .. autofunction:: multiswarm.get_best_loss_and_params
+
+.. autofunction:: multiswarm.get_subcomm

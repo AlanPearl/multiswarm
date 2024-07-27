@@ -67,29 +67,10 @@ class ParticleSwarm:
         comm : MPI.Comm, optional
             MPI Communicator, by default COMM_WORLD
         """
-        assert comm is not None, "Please install mpi4py"
         randkey = init_randkey(seed)
-        rank, nranks = comm.Get_rank(), comm.Get_size()
-        if ranks_per_particle is not None:
-            # Set this to manually control intra-particle parallelization vs
-            # inter-particle parallelization, even when there are not enough
-            # ranks for nparticles * ranks_per_particle. By default,
-            # inter-particle parallelization is prioritized.
-            num_groups = comm.size / ranks_per_particle
-            msg = "comm.size must be a multiple of ranks_per_particle"
-            assert not num_groups % 1, msg
-            num_groups = int(num_groups)
-            subcomm, _, group_rank = split_subcomms(num_groups, comm=comm)
-            particles_on_this_rank = np.array_split(
-                np.arange(nparticles), num_groups)[group_rank].tolist()
-        elif nparticles > nranks:
-            particles_on_this_rank = np.array_split(
-                np.arange(nparticles), nranks)[rank].tolist()
-            subcomm = None
-        else:
-            subcomm, _, particles_on_this_rank = split_subcomms(
-                nparticles, comm=comm)
-            particles_on_this_rank = [particles_on_this_rank]
+        subcomm, particles_on_this_rank = get_subcomm(
+            nparticles, ranks_per_particle, comm=comm,
+            return_particles_on_this_rank=True)
 
         num_particles_on_this_rank = len(particles_on_this_rank)
         init_key, *particle_keys = jran.split(
@@ -158,7 +139,6 @@ class ParticleSwarm:
         loc_x_history = [[] for _ in range(self.num_particles_on_this_rank)]
         loc_v_history = [[] for _ in range(self.num_particles_on_this_rank)]
         loc_loss_history = [[] for _ in range(self.num_particles_on_this_rank)]
-        istep = -1
         start = time()
 
         def trange(x):
@@ -166,11 +146,7 @@ class ParticleSwarm:
                 return range(x)
             else:
                 return tqdm.trange(x, desc="PSO Progress")
-        for istep in trange(nsteps):
-            # if not self.comm.rank:
-            #     print(f"- Best loss={swarm_loss_best} at x={swarm_x_best}"
-            #           f" for t={istep}", flush=True)
-
+        for _ in trange(nsteps):
             istep_loss = [None for _ in range(self.num_particles_on_this_rank)]
             for ip in range(self.num_particles_on_this_rank):
                 update_key = jran.split(particle_keys[ip], 1)[0]
@@ -239,6 +215,62 @@ class ParticleSwarm:
         best_loss = all_loss[best_particle]
 
         return best_x, best_loss
+
+
+def get_subcomm(nparticles, ranks_per_particle=None, comm=COMM_WORLD,
+                return_particles_on_this_rank=False):
+    """
+    Initialize MPI communicators to be used for PSO
+
+    Parameters
+    ----------
+    nparticles : int
+        Number of particles
+    ranks_per_particle : int, optional
+        Set this to manually control intra-particle parallelization, even
+        if there are not enough ranks for nparticles * ranks_per_particle.
+        By default (None), inter-particle parallelization is prioritized
+    comm : MPI.Comm, optional
+        MPI Communicator, by default COMM_WORLD
+    return_particles_on_this_rank : bool, optional
+        If true, return tuple (subcomm, particles_on_this_rank). By default,
+        only subcomm is returned
+
+    Returns
+    -------
+    subcomm : MPI.Comm
+        This rank's subcommunicator, which can only talk to its "group"
+    particles_on_this_rank : list
+        If `return_particles_on_this_rank=True` this list will be returned,
+        specifying the indices of particles this group is responsible for
+    """
+    assert comm is not None, "Please install mpi4py"
+    rank, nranks = comm.Get_rank(), comm.Get_size()
+    if ranks_per_particle is not None:
+        # Set this to manually control intra-particle parallelization vs
+        # inter-particle parallelization, even when there are not enough
+        # ranks for nparticles * ranks_per_particle. By default,
+        # inter-particle parallelization is prioritized.
+        num_groups = comm.size / ranks_per_particle
+        msg = "comm.size must be a multiple of ranks_per_particle"
+        assert not num_groups % 1, msg
+        num_groups = int(num_groups)
+        subcomm, _, group_rank = split_subcomms(num_groups, comm=comm)
+        particles_on_this_rank = np.array_split(
+            np.arange(nparticles), num_groups)[group_rank].tolist()
+    elif nparticles > nranks:
+        particles_on_this_rank = np.array_split(
+            np.arange(nparticles), nranks)[rank].tolist()
+        subcomm = None
+    else:
+        subcomm, _, particles_on_this_rank = split_subcomms(
+            nparticles, comm=comm)
+        particles_on_this_rank = [particles_on_this_rank]
+
+    if return_particles_on_this_rank:
+        return subcomm, particles_on_this_rank
+    else:
+        return subcomm
 
 
 def get_best_loss_and_params(loss_history, params_history):
