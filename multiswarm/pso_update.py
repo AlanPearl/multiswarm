@@ -5,7 +5,6 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 from jax import random as jran
-# from smt.sampling_methods import LHS
 from scipy.stats import qmc
 
 import tqdm.auto as tqdm
@@ -429,22 +428,6 @@ def _impose_reflecting_boundary_condition(x, v, xmin, xmax):
     v = np.where(msk_lo | msk_hi, -v, v)
     return x, v
 
-
-# def get_lhs_initial_conditions(numpart, ndim, xlo=0, xhi=1, maximin=True,
-#                                vmax_frac=VMAX_FRAC, ran_key=None):
-#     criterion = "maximin" if maximin else "c"
-#     if ran_key is None:
-#         ran_key = jran.PRNGKey(987654321)
-#     xmin = np.zeros(ndim) + xlo
-#     xmax = np.zeros(ndim) + xhi
-#     xlims = np.array([xmin, xmax]).T
-#     x_init_key, v_init_key, ran_key = jran.split(ran_key, 3)
-#     x_seed = int(jran.randint(
-#         x_init_key, (), 0, 1000000000, dtype=np.uint32))
-#     sampler = LHS(xlimits=xlims, criterion=criterion, random_state=x_seed)
-#     x_init = sampler(numpart)
-#     v_init = _get_v_init(numpart, v_init_key, xmin, xmax, vmax_frac)
-#     return xmin, xmax, x_init, v_init
 
 def get_lhs_initial_conditions(numpart, ndim, xlo=0, xhi=1, random_cd=True,
                                vmax_frac=VMAX_FRAC, ran_key=None):
